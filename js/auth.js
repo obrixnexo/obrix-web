@@ -1,0 +1,137 @@
+/* =====================================================================
+ * Obrix Nexo · ingreso, cambio de contraseña y armazón del panel
+ * El panel que se muestra depende del rol que devuelve la API:
+ *   OPERADOR / ADMIN_OBRIX → panel Obrix · ADMIN_EMPRESA → panel constructora · ADMIN_PROYECTO → panel de obra
+ * ===================================================================== */
+'use strict';
+
+function viewLogin() {
+  return `<div class="sessionbar">${logo()}<span class="grow"></span><button class="btn btn-ghost btn-sm" onclick="navigate('#/')">Volver a la tienda</button></div>
+  <div class="auth"><form class="auth-card" onsubmit="doLogin(event)">
+    <div><h1>Ingresa a tu panel</h1><p class="muted" style="margin-top:4px">Para constructoras y el equipo de Obrix.</p></div>
+    <label class="field"><span class="label">Correo</span><input class="input" id="lg-email" type="email" autocomplete="username" required></label>
+    <label class="field"><span class="label">Contraseña</span><input class="input" id="lg-pass" type="password" autocomplete="current-password" required></label>
+    <div id="lg-error"></div>
+    <button class="btn btn-primary btn-lg" type="submit" id="lg-btn">Ingresar</button>
+    <p class="help">¿Olvidaste tu contraseña? Pídele al Admin de tu constructora (o a Obrix) una contraseña temporal.</p>
+  </form></div>`;
+}
+async function doLogin(e) {
+  e.preventDefault();
+  const btn = $('#lg-btn'); btn.disabled = true; btn.textContent = 'Ingresando…';
+  try {
+    const r = await api('/api/auth/login', { method: 'POST', body: { email: val('lg-email'), password: $('#lg-pass').value } });
+    saveSession(r);
+    navigate(r.user.mustChangePassword ? '#/panel' : '#/panel');
+  } catch (err) {
+    $('#lg-error').innerHTML = `<div class="alert alert-danger">${esc(err.message)}</div>`;
+    btn.disabled = false; btn.textContent = 'Ingresar';
+  }
+}
+
+function viewChangePassword() {
+  const forced = S.session?.user?.mustChangePassword;
+  return `<div class="sessionbar">${logo()}<span class="grow"></span><button class="btn btn-ghost btn-sm" onclick="logout()">Salir</button></div>
+  <div class="auth"><form class="auth-card" onsubmit="doChangePassword(event)">
+    <div><h1>${forced ? 'Crea tu contraseña' : 'Cambiar contraseña'}</h1>
+      <p class="muted" style="margin-top:4px">${forced ? 'Ingresaste con una contraseña temporal. Crea una propia para continuar.' : ''}</p></div>
+    <label class="field"><span class="label">Contraseña ${forced ? 'temporal' : 'actual'}</span><input class="input" id="cp-current" type="password" autocomplete="current-password" required></label>
+    <label class="field"><span class="label">Nueva contraseña</span><input class="input" id="cp-new" type="password" autocomplete="new-password" minlength="8" maxlength="72" required><span class="help">Mínimo 8 caracteres, con al menos una letra y un número.</span></label>
+    <label class="field"><span class="label">Repite la nueva contraseña</span><input class="input" id="cp-new2" type="password" autocomplete="new-password" required></label>
+    <div id="cp-error"></div>
+    <button class="btn btn-primary btn-lg" type="submit">Guardar contraseña</button>
+    ${forced ? '' : `<button type="button" class="btn btn-ghost" onclick="navigate('#/panel')">Cancelar</button>`}
+  </form></div>`;
+}
+async function doChangePassword(e) {
+  e.preventDefault();
+  const n1 = $('#cp-new').value, n2 = $('#cp-new2').value;
+  if (n1 !== n2) { $('#cp-error').innerHTML = '<div class="alert alert-danger">Las contraseñas no coinciden.</div>'; return; }
+  try {
+    await api('/api/auth/change-password', { method: 'POST', body: { currentPassword: $('#cp-current').value, newPassword: n1 } });
+    await refreshMe();
+    toast('Contraseña guardada.');
+    S.view = 'panel'; navigate('#/panel');
+  } catch (err) { $('#cp-error').innerHTML = `<div class="alert alert-danger">${esc(err.message)}</div>`; }
+}
+
+/* ---------------- armazón del panel ---------------- */
+function panelKind() { return isStaff() ? 'obrix' : isCompanyAdmin() ? 'empresa' : 'proyecto'; }
+function panelNav() {
+  const k = panelKind();
+  if (k === 'obrix') return [
+    { id: 'revision', label: 'Revisión de saldos', icon: 'shield' }, { id: 'pedidos', label: 'Pedidos y pagos', icon: 'bag' },
+    { id: 'constructoras', label: 'Constructoras', icon: 'brief' }, { id: 'solicitudes', label: 'Solicitudes', icon: 'inbox' }];
+  if (k === 'empresa') return [
+    { id: 'resumen', label: 'Resumen', icon: 'home' }, { id: 'saldos', label: 'Saldos', icon: 'list' },
+    { id: 'publicar', label: 'Publicar saldo', icon: 'addc' }, { id: 'pedidos', label: 'Pedidos', icon: 'truck' },
+    { id: 'obras', label: 'Obras', icon: 'brief' }, { id: 'perfiles', label: 'Perfiles', icon: 'users' }];
+  return [{ id: 'publicar', label: 'Publicar saldo', icon: 'addc' }, { id: 'saldos', label: 'Mis saldos', icon: 'list' },
+    { id: 'pedidos', label: 'Pedidos', icon: 'truck' }];
+}
+function openPanel(section) {
+  const nav = panelNav();
+  const target = nav.find(n => n.id === section)?.id || nav[0].id;
+  if (S.panel.section !== target || !S.panel.loaded) {
+    S.panel.section = target; S.panel.filter = S.panel.nextFilter || 'ALL'; S.panel.nextFilter = null;
+    S.panel.q = ''; S.panel.data = {}; S.panel.loaded = false;
+    if (target !== 'publicar') S.panel.edit = null;
+    loadSection();
+  }
+}
+function goPanel(section) { navigate('#/panel/' + section); }
+async function loadSection() {
+  S.panel.loading = true; scheduleRender();
+  try {
+    const k = panelKind();
+    if (k === 'obrix') await loadObrixSection(S.panel.section);
+    else await loadCompanySection(S.panel.section);
+    S.panel.loaded = true;
+  } catch (e) { fail(e); }
+  S.panel.loading = false; scheduleRender();
+}
+function viewPanel() {
+  if (!S.session) return viewLogin();
+  const k = panelKind(), nav = panelNav(), cur = S.panel.section || nav[0].id;
+  const u = S.session.user;
+  const roleLabel = k === 'obrix' ? 'Obrix · Backoffice' : k === 'empresa' ? 'Admin Empresa' : 'Admin Proyecto · Almacén';
+  const page = S.panel.loading && !S.panel.loaded ? { title: nav.find(n => n.id === cur)?.label || '', content: loadingBox() }
+    : k === 'obrix' ? obrixPage(cur) : companyPage(cur);
+  return `<div class="shell">
+    <aside class="side" aria-label="Menú del panel">
+      ${logo("navigate('#/')")}
+      <div class="side-role">${esc(roleLabel)}</div>
+      ${nav.map(n => `<button class="nav" ${cur === n.id ? 'aria-current="page"' : ''} onclick="goPanel('${n.id}')">${ICON[n.icon]}<span>${n.label}</span>${page.counts?.[n.id] ? `<span class="count">${page.counts[n.id]}</span>` : ''}</button>`).join('')}
+      <div class="side-foot">
+        <span><b style="color:#fff">${esc(u.fullName)}</b><br>${esc(u.email)}</span>
+        <button class="btn btn-ghost btn-sm" style="color:var(--ink-on-navy-muted);justify-content:flex-start" onclick="S.view='password'; render()">Cambiar contraseña</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--ink-on-navy-muted);justify-content:flex-start" onclick="logout('Sesión cerrada.')">${ICON.logout} Cerrar sesión</button>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="main-h"><h2>${page.title}${page.sub ? `<span class="sub">${page.sub}</span>` : ''}</h2>${page.actions || ''}</div>
+      <div class="content">${page.content}</div>
+    </main>
+  </div>`;
+}
+function panelOverlayHTML(o) {
+  return panelKind() === 'obrix' ? obrixOverlayHTML(o) : companyOverlayHTML(o);
+}
+
+/* ---------------- piezas comunes de los paneles ---------------- */
+function chips(options, current, onClick) {
+  return `<div class="toolbar" role="toolbar" aria-label="Filtrar">${options.map(([k, l]) => `<button class="chip" aria-pressed="${current === k}" onclick="${onClick}('${k}')">${l}</button>`).join('')}</div>`;
+}
+function setFilter(f) { S.panel.filter = f; render(); }
+function tempPasswordModal(title, who, password) {
+  return `<div class="scrim"></div><div class="modal-wrap" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modal sm">
+    <div class="modal-h"><h3>${esc(title)}</h3></div>
+    <div class="modal-b">
+      <p>Contraseña temporal de <b>${esc(who)}</b>:</p>
+      <div class="pw" id="tmp-pw">${esc(password)}</div>
+      <div class="alert alert-warning">Cópiala y entrégasela por un canal seguro (WhatsApp o en persona). <b>Solo se muestra esta vez.</b> Al ingresar se le pedirá crear su propia contraseña.</div>
+    </div>
+    <div class="modal-f"><button class="btn btn-secondary" onclick="copyText('${esc(password)}')">Copiar</button><button class="btn btn-primary" onclick="closeOverlay(); loadSection()">Listo</button></div>
+  </div></div>`;
+}
+const priceCell = p => `${money(p.unitPriceWithIgv)}<br><small class="muted">neto ${money(p.netUnitPrice)}</small>`;

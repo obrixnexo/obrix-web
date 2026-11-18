@@ -1,0 +1,44 @@
+OBRIX NEXO · WEB (tienda + paneles)
+====================================
+
+Qué es
+------
+La web que ven los compradores, las constructoras y el equipo de Obrix.
+Son archivos HTML, CSS y JavaScript sin compilar: se abren en el navegador y hablan con la API (obrix-api).
+
+  index.html      la página (carga lo demás)
+  config.js       dirección de la API (localhost:8080 en tu laptop; API_EN_LA_NUBE cuando está publicada)
+  css/styles.css  el diseño
+  js/core.js      utilidades: llamadas a la API, sesión, rutas (#/saldos, #/panel...)
+  js/public.js    tienda: inicio, catálogo, ficha, pedido, seguimiento del pedido
+  js/auth.js      ingreso, cambio de contraseña y armazón del panel
+  js/company.js   panel de la constructora (Admin Empresa y Admin Proyecto)
+  js/obrix.js     panel de Obrix (revisión de saldos, pedidos y pagos, constructoras, solicitudes)
+
+Cómo abrirla en tu laptop
+-------------------------
+1. Docker Desktop abierto y la API corriendo en IntelliJ (como siempre).
+2. En PowerShell, dentro de esta carpeta:
+     npx --yes http-server -p 5500 -c-1
+3. Abre en el navegador:  http://localhost:5500
+
+Usuarios de prueba (contraseña Obrix2026!):
+  operador@obrixnexo.com          panel de Obrix
+  gerencia@constructora-demo.pe   Admin Empresa
+  almacen@constructora-demo.pe    Admin Proyecto (almacén)
+
+Direcciones útiles
+------------------
+  #/              inicio
+  #/saldos        catálogo
+  #/saldo/OBX-... ficha de un saldo
+  #/pedido/TOKEN  seguimiento de un pedido (el enlace que recibe el comprador)
+  #/ingresar      ingreso al panel
+  #/panel         panel (según el rol)
+
+Publicarla en internet (demo)
+-----------------------------
+1. En config.js cambia API_EN_LA_NUBE por la dirección de tu API en Render (sin "/" al final).
+2. En Netlify: Add new project → Deploy manually → arrastra ESTA carpeta (obrix-web).
+3. Cada vez que cambies algo, vuelve a arrastrar la carpeta en Netlify (pestaña Deploys).
+Si la API estaba dormida, la web muestra "Encendiendo la demo…" hasta que responda (~1 minuto).
