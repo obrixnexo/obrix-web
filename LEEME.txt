@@ -13,6 +13,8 @@ Son archivos HTML, CSS y JavaScript sin compilar: se abren en el navegador y hab
   js/public.js    tienda: inicio, catálogo, ficha, pedido, seguimiento del pedido
   js/auth.js      ingreso, cambio de contraseña y armazón del panel
   js/company.js   panel de la constructora (Admin Empresa y Admin Proyecto)
+  js/import.js    carga masiva de saldos desde Excel (plantilla, revisión fila por fila y creación)
+  vendor/         librerías de terceros guardadas aquí (ExcelJS y JSZip, licencia MIT; se cargan solo al usar la carga masiva)
   js/obrix.js     panel de Obrix (revisión de saldos, pedidos y pagos, constructoras, solicitudes)
 
 Cómo abrirla en tu laptop
@@ -36,9 +38,21 @@ Direcciones útiles
   #/ingresar      ingreso al panel
   #/panel         panel (según el rol)
 
+Carga masiva de saldos (Excel)
+------------------------------
+Panel de la constructora → Saldos → "Cargar desde Excel".
+1. "Descargar plantilla": un .xlsx con las columnas del formulario y listas con las obras activas,
+   categorías, unidades y estados.
+2. La constructora la llena (hasta 500 saldos por archivo) y la sube.
+3. La plataforma revisa cada fila con las mismas reglas del formulario y muestra qué corregir.
+   Si un saldo con el mismo nombre ya existe en esa obra, la fila se omite (así no se duplica al volver a subir).
+4. "Crear saldos" crea cada fila con la misma API del formulario (la API vuelve a validar todo).
+   Quedan en BORRADOR: luego se les agregan fotos y se envían a revisión de Obrix.
+5. "Descargar filas que faltan" baja solo las filas con errores y el motivo, para corregir y volver a subir.
+No necesita cambios en el backend.
+
 Publicarla en internet (demo)
 -----------------------------
-1. En config.js cambia API_EN_LA_NUBE por la dirección de tu API en Render (sin "/" al final).
-2. En Netlify: Add new project → Deploy manually → arrastra ESTA carpeta (obrix-web).
-3. Cada vez que cambies algo, vuelve a arrastrar la carpeta en Netlify (pestaña Deploys).
+Netlify (proyecto obrix-nexo-demo) está conectado a GitHub (obrixnexo/obrix-web, rama main):
+cada cambio que se sube a main se publica solo en 1 o 2 minutos.
 Si la API estaba dormida, la web muestra "Encendiendo la demo…" hasta que responda (~1 minuto).

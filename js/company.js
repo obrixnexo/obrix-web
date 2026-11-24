@@ -38,7 +38,7 @@ function companyPage(cur) {
     case 'resumen': return { title: 'Resumen', sub: company, content: resumenContent(), counts: companyCounts() };
     case 'saldos': return {
       title: isCompanyAdmin() ? 'Saldos' : 'Mis saldos', sub: 'Lo que publicaste y en qué estado está',
-      actions: `<button class="btn btn-primary" onclick="newListing()">${ICON.plus} Publicar saldo</button>`,
+      actions: `<div class="actions" style="gap:8px"><button class="btn btn-secondary" onclick="openImport()">${ICON.upload} Cargar desde Excel</button><button class="btn btn-primary" onclick="newListing()">${ICON.plus} Publicar saldo</button></div>`,
       content: listingsContent(), counts: companyCounts()
     };
     case 'publicar': return { title: S.panel.edit ? 'Editar saldo' : 'Publicar saldo', sub: S.panel.edit ? esc(S.panel.edit.publicCode) : 'Crea el saldo, sube fotos y envíalo a revisión de Obrix', content: publishForm() };
@@ -458,6 +458,7 @@ function companyOverlayHTML(o) {
     case 'member': return memberModal(o);
     case 'assign': return assignModal(o);
     case 'tempPassword': return tempPasswordModal(o.title, o.who, o.password);
+    case 'import': return importModal(o);
     default: return '';
   }
 }
