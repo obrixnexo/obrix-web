@@ -14,6 +14,8 @@ Son archivos HTML, CSS y JavaScript sin compilar: se abren en el navegador y hab
   js/auth.js      ingreso, cambio de contraseña y armazón del panel
   js/company.js   panel de la constructora (Admin Empresa y Admin Proyecto)
   js/import.js    carga masiva de saldos desde Excel (plantilla, revisión fila por fila y creación)
+  js/approval.js  aprobación interna (bandeja del aprobador, ficha, historial), avisos (campanita) y
+                  configuración de aprobadores en el panel de Obrix
   vendor/         librerías de terceros guardadas aquí (ExcelJS y JSZip, licencia MIT; se cargan solo al usar la carga masiva)
   js/obrix.js     panel de Obrix (revisión de saldos, pedidos y pagos, constructoras, solicitudes)
 
@@ -26,8 +28,8 @@ Cómo abrirla en tu laptop
 
 Usuarios de prueba (contraseña Obrix2026!):
   operador@obrixnexo.com          panel de Obrix
-  gerencia@constructora-demo.pe   Admin Empresa
-  almacen@constructora-demo.pe    Admin Proyecto (almacén)
+  gerencia@constructora-demo.pe   Admin Empresa · aprobador de nivel 1
+  almacen@constructora-demo.pe    Admin Proyecto (almacén) · carga los saldos
 
 Direcciones útiles
 ------------------
@@ -38,6 +40,21 @@ Direcciones útiles
   #/ingresar      ingreso al panel
   #/panel         panel (según el rol)
 
+Aprobación interna de saldos
+----------------------------
+Borrador → aprobación de la constructora (nivel 1 … N) → revisión de Obrix → tienda.
+- Quien carga (almacén) envía el saldo. Los aprobadores de su nivel lo ven en "Aprobaciones" y lo aprueban o rechazan
+  (el rechazo exige motivo y vuelve a quien lo cargó; al corregir, reinicia en el nivel 1).
+- Nadie aprueba un saldo que cargó o envió él mismo.
+- Obrix define cuántos niveles tiene cada constructora y quién aprueba en cada uno:
+  panel de Obrix → Constructoras → "Aprobación". No requiere tocar código.
+- "Avisos" (la campanita) muestra lo que espera tu aprobación y lo que pasó con tus saldos.
+
+Términos y condiciones
+----------------------
+Los perfiles de las constructoras los aceptan al ingresar (una vez por versión) y los compradores al pedir.
+El texto está en la landing (obrixnexo.com/terminos/); la versión vigente la define la API (TERMS_VERSION).
+
 Carga masiva de saldos (Excel)
 ------------------------------
 Panel de la constructora → Saldos → "Cargar desde Excel".
@@ -47,7 +64,7 @@ Panel de la constructora → Saldos → "Cargar desde Excel".
 3. La plataforma revisa cada fila con las mismas reglas del formulario y muestra qué corregir.
    Si un saldo con el mismo nombre ya existe en esa obra, la fila se omite (así no se duplica al volver a subir).
 4. "Crear saldos" crea cada fila con la misma API del formulario (la API vuelve a validar todo).
-   Quedan en BORRADOR: luego se les agregan fotos y se envían a revisión de Obrix.
+   Quedan en BORRADOR: luego se les agregan fotos y se envían a aprobación de la constructora.
 5. "Descargar filas que faltan" baja solo las filas con errores y el motivo, para corregir y volver a subir.
 No necesita cambios en el backend.
 

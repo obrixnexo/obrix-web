@@ -55,6 +55,39 @@ async function doChangePassword(e) {
   } catch (err) { $('#cp-error').innerHTML = `<div class="alert alert-danger">${esc(err.message)}</div>`; }
 }
 
+/* ---------------- términos y condiciones (perfiles de constructora) ---------------- */
+function viewTerms() {
+  const u = S.session?.user;
+  return `<div class="sessionbar">${logo()}<span class="grow"></span><button class="btn btn-ghost btn-sm" onclick="logout()">Salir</button></div>
+  <div class="auth"><form class="auth-card terms-card" onsubmit="doAcceptTerms(event)">
+    <div><h1>Términos y condiciones</h1>
+      <p class="muted" style="margin-top:4px">Antes de usar el panel, lee y acepta los términos de Obrix Nexo (versión ${esc(u?.termsVersion || '')}).</p></div>
+    <ul class="terms-points">
+      <li>Obrix intermedia la venta: los compradores pagan a Obrix y Obrix te liquida tu precio neto después de la entrega.</li>
+      <li>Cada saldo pasa por la aprobación de tu constructora y por la revisión de Obrix antes de publicarse.</li>
+      <li>Publicas solo material que tu constructora puede vender, con datos, fotos y cantidades reales.</li>
+      <li>Entregas en obra solo pedidos que Obrix marcó como pagados, dentro de la fecha límite de recojo.</li>
+    </ul>
+    <a class="btn btn-secondary" href="${esc(termsUrl())}" target="_blank" rel="noopener">Leer los términos completos</a>
+    <label class="privacy"><input type="checkbox" id="tc-ok" required> <span>Leí y acepto los términos y condiciones de Obrix Nexo.</span></label>
+    <div id="tc-error"></div>
+    <button class="btn btn-primary btn-lg" type="submit" id="tc-btn">Aceptar y continuar</button>
+  </form></div>`;
+}
+async function doAcceptTerms(e) {
+  e.preventDefault();
+  const btn = $('#tc-btn'); btn.disabled = true;
+  try {
+    const me = await api('/api/auth/accept-terms', { method: 'POST', body: { version: S.session.user.termsVersion } });
+    S.session.user = me; store.set('obrix.session', S.session);
+    toast('Términos aceptados.');
+    S.panel.loaded = false; navigate('#/panel');
+  } catch (err) {
+    if (err.code === 'TERMS_OUTDATED') { try { await refreshMe(); } catch (x) { /* nada */ } render(); }
+    $('#tc-error').innerHTML = `<div class="alert alert-danger">${esc(err.message)}</div>`; btn.disabled = false;
+  }
+}
+
 /* ---------------- armazón del panel ---------------- */
 function panelKind() { return isStaff() ? 'obrix' : isCompanyAdmin() ? 'empresa' : 'proyecto'; }
 function panelNav() {
@@ -62,22 +95,32 @@ function panelNav() {
   if (k === 'obrix') return [
     { id: 'revision', label: 'Revisión de saldos', icon: 'shield' }, { id: 'pedidos', label: 'Pedidos y pagos', icon: 'bag' },
     { id: 'constructoras', label: 'Constructoras', icon: 'brief' }, { id: 'solicitudes', label: 'Solicitudes', icon: 'inbox' }];
+  const approvals = isApprover() ? [{ id: 'aprobaciones', label: 'Aprobaciones', icon: 'stamp' }] : [];
   if (k === 'empresa') return [
-    { id: 'resumen', label: 'Resumen', icon: 'home' }, { id: 'saldos', label: 'Saldos', icon: 'list' },
+    { id: 'resumen', label: 'Resumen', icon: 'home' }, ...approvals, { id: 'saldos', label: 'Saldos', icon: 'list' },
     { id: 'publicar', label: 'Publicar saldo', icon: 'addc' }, { id: 'pedidos', label: 'Pedidos', icon: 'truck' },
     { id: 'obras', label: 'Obras', icon: 'brief' }, { id: 'perfiles', label: 'Perfiles', icon: 'users' }];
-  return [{ id: 'publicar', label: 'Publicar saldo', icon: 'addc' }, { id: 'saldos', label: 'Mis saldos', icon: 'list' },
+  return [...approvals, { id: 'publicar', label: 'Publicar saldo', icon: 'addc' }, { id: 'saldos', label: 'Mis saldos', icon: 'list' },
     { id: 'pedidos', label: 'Pedidos', icon: 'truck' }];
 }
 function openPanel(section) {
   const nav = panelNav();
   const target = nav.find(n => n.id === section)?.id || nav[0].id;
+  startNotifications();
   if (S.panel.section !== target || !S.panel.loaded) {
     S.panel.section = target; S.panel.filter = S.panel.nextFilter || 'ALL'; S.panel.nextFilter = null;
-    S.panel.q = ''; S.panel.data = {}; S.panel.loaded = false;
+    S.panel.q = ''; S.panel.data = {}; S.panel.loaded = false; S.panel.af = {};
     if (target !== 'publicar') S.panel.edit = null;
     loadSection();
+  } else if (S.panel.openId) {
+    openPendingItem();
   }
+}
+/** Abre el saldo que pedía el enlace del aviso (#/panel/...?saldo=ID), una vez cargada la sección. */
+function openPendingItem() {
+  const id = S.panel.openId; S.panel.openId = null;
+  if (!id || panelKind() === 'obrix') return;
+  if (S.panel.section === 'aprobaciones') openApproval(id); else openListing(id);
 }
 function goPanel(section) { navigate('#/panel/' + section); }
 async function loadSection() {
@@ -89,19 +132,23 @@ async function loadSection() {
     S.panel.loaded = true;
   } catch (e) { fail(e); }
   S.panel.loading = false; scheduleRender();
+  if (S.panel.openId) setTimeout(openPendingItem, 0);
 }
 function viewPanel() {
   if (!S.session) return viewLogin();
   const k = panelKind(), nav = panelNav(), cur = S.panel.section || nav[0].id;
   const u = S.session.user;
-  const roleLabel = k === 'obrix' ? 'Obrix · Backoffice' : k === 'empresa' ? 'Admin Empresa' : 'Admin Proyecto · Almacén';
+  const roleLabel = (k === 'obrix' ? 'Obrix · Backoffice' : k === 'empresa' ? 'Admin Empresa' : 'Admin Proyecto · Almacén')
+    + (isApprover() ? ` · Aprobador nivel ${approverLevel()}` : '');
+  const unread = S.notifs?.unread || 0;
   const page = S.panel.loading && !S.panel.loaded ? { title: nav.find(n => n.id === cur)?.label || '', content: loadingBox() }
     : k === 'obrix' ? obrixPage(cur) : companyPage(cur);
   return `<div class="shell">
     <aside class="side" aria-label="Menú del panel">
       ${logo("navigate('#/')")}
       <div class="side-role">${esc(roleLabel)}</div>
-      ${nav.map(n => `<button class="nav" ${cur === n.id ? 'aria-current="page"' : ''} onclick="goPanel('${n.id}')">${ICON[n.icon]}<span>${n.label}</span>${page.counts?.[n.id] ? `<span class="count">${page.counts[n.id]}</span>` : ''}</button>`).join('')}
+      <button class="nav" onclick="openNotifications()" aria-label="Avisos${unread ? `, ${unread} sin leer` : ''}">${ICON.bell}<span>Avisos</span>${unread ? `<span class="count">${unread}</span>` : ''}</button>
+      ${nav.map(n => { const c = page.counts?.[n.id] || (n.id === 'aprobaciones' ? S.approvalsPending || '' : ''); return `<button class="nav" ${cur === n.id ? 'aria-current="page"' : ''} onclick="goPanel('${n.id}')">${ICON[n.icon]}<span>${n.label}</span>${c ? `<span class="count">${c}</span>` : ''}</button>`; }).join('')}
       <div class="side-foot">
         <span><b style="color:#fff">${esc(u.fullName)}</b><br>${esc(u.email)}</span>
         <button class="btn btn-ghost btn-sm" style="color:var(--ink-on-navy-muted);justify-content:flex-start" onclick="S.view='password'; render()">Cambiar contraseña</button>
@@ -115,6 +162,7 @@ function viewPanel() {
   </div>`;
 }
 function panelOverlayHTML(o) {
+  if (o.kind === 'notifs') return notificationsDrawer(o);
   return panelKind() === 'obrix' ? obrixOverlayHTML(o) : companyOverlayHTML(o);
 }
 

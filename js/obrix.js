@@ -31,7 +31,7 @@ function obrixPage(cur) {
   if (cur === 'revision') {
     const items = d.queue?.items || [];
     return {
-      title: 'Revisión de saldos', sub: 'Aprueba fotos, datos y precio antes de que salgan al catálogo',
+      title: 'Revisión de saldos', sub: 'Ya aprobados por su constructora: revisa fotos, datos y precio antes de publicarlos',
       content: `${chips([['ALL', 'Por revisar'], ['OBSERVED', 'Observados (esperan a la constructora)']], f, 'obrixFilter')}
         ${items.length ? `<div class="tablewrap"><table><thead><tr><th>Saldo</th><th>Constructora · obra</th><th>Cantidad</th><th>Precio neto</th><th>Recojo hasta</th><th>Enviado</th><th></th></tr></thead><tbody>
           ${items.map(i => `<tr class="click" onclick="openReview('${i.organizationId}','${i.id}')"><td><b>${esc(i.title)}</b><br><small class="muted">${esc(i.publicCode)} · ${esc(i.categoryName)} · ${i.photoCount} ${i.photoCount === 1 ? 'foto' : 'fotos'}</small></td>
@@ -61,13 +61,13 @@ function obrixPage(cur) {
   if (cur === 'constructoras') {
     const items = d.orgs?.items || [];
     return {
-      title: 'Constructoras', sub: 'Alta de constructoras y su primer Admin Empresa',
+      title: 'Constructoras', sub: 'Alta de constructoras, su primer Admin Empresa y sus niveles de aprobación',
       actions: `<label class="search" style="max-width:240px"><span class="sr">Buscar</span>${ICON.search}<input id="ob-q" type="search" style="color:var(--ink);background:var(--surface);border-color:var(--border-strong)" placeholder="Nombre o RUC" value="${esc(S.panel.q || '')}" oninput="obrixSearch(this.value)"></label>
         <button class="btn btn-primary" onclick="openOverlay({kind:'org'})">${ICON.plus} Nueva constructora</button>`,
       content: items.length ? `<div class="tablewrap"><table><thead><tr><th>Constructora</th><th>RUC</th><th>Alta</th><th>Estado</th><th></th></tr></thead><tbody>
         ${items.map(o => `<tr><td><b>${esc(o.tradeName)}</b><br><small class="muted">${esc(o.legalName)}</small></td><td class="num">${esc(o.ruc)}</td><td>${fmtDate(o.createdAt)}</td>
           <td>${o.status === 'ACTIVE' ? '<span class="badge b-success">Activa</span>' : '<span class="badge b-danger">Suspendida</span>'}</td>
-          <td>${o.status === 'ACTIVE' ? `<button class="btn btn-ghost btn-sm" onclick="orgStatus('${o.id}','suspend')">Suspender</button>` : `<button class="btn btn-secondary btn-sm" onclick="orgStatus('${o.id}','reactivate')">Reactivar</button>`}</td></tr>`).join('')}
+          <td><div class="actions">${o.status === 'ACTIVE' ? `<button class="btn btn-secondary btn-sm" onclick="openApprovalConfig('${o.id}')">${ICON.stamp} Aprobación</button><button class="btn btn-ghost btn-sm" onclick="orgStatus('${o.id}','suspend')">Suspender</button>` : `<button class="btn btn-secondary btn-sm" onclick="orgStatus('${o.id}','reactivate')">Reactivar</button>`}</div></td></tr>`).join('')}
       </tbody></table></div>` : noData('Sin constructoras', 'Da de alta la primera con "Nueva constructora".')
     };
   }
@@ -88,8 +88,10 @@ function obrixPage(cur) {
 /* ---------------- revisión de un saldo ---------------- */
 async function openReview(organizationId, listingId) {
   openOverlay({ kind: 'review', loading: true });
-  try { openOverlay({ kind: 'review', orgId: organizationId, l: await api(`/api/organizations/${organizationId}/listings/${listingId}`), photo: 0 }); }
-  catch (e) { closeOverlay(); fail(e); }
+  try { openOverlay({ kind: 'review', orgId: organizationId, l: await api(`/api/organizations/${organizationId}/listings/${listingId}`), photo: 0, timeline: null }); }
+  catch (e) { closeOverlay(); fail(e); return; }
+  const events = await loadTimeline(organizationId, listingId);
+  if (S.overlay?.kind === 'review' && S.overlay.l.id === listingId) { S.overlay.timeline = events; renderOverlay(); }
 }
 function suggestedPreview() {
   const o = S.overlay, v = Number(val('rv-price'));
@@ -122,6 +124,7 @@ function reviewDrawer(o) {
           <dt>Neto constructora</dt><dd>${money(p.netUnitPrice)}</dd>
           <dt>Comisión Obrix</dt><dd>${(num(p.commissionRate) * 100).toFixed(0)}% · ${money(p.commissionAmount)}</dd>
           <dt>Comprador paga</dt><dd><b>${money(p.unitPriceWithIgv)}</b> con IGV</dd></dl></div>
+        ${timelineHTML(o.timeline)}
         ${l.status === 'OBSERVED' ? `<div class="box internal"><h4>Observación enviada</h4><p>${esc(l.reviewNote || '')}</p>${l.suggestedPrice ? `<p class="help">Precio neto sugerido: ${money(l.suggestedPrice.netUnitPrice)}</p>` : ''}</div>` : ''}
         ${pending ? `<div class="box"><h4>Observar (si hay que corregir algo)</h4>
           <label class="field"><span class="label">Qué debe corregir la constructora</span><input class="input" id="rv-note" maxlength="300" placeholder="Ej. sube una foto del lote completo"></label>
@@ -267,6 +270,7 @@ function obrixOverlayHTML(o) {
     case 'review': return reviewDrawer(o);
     case 'adminOrder': return adminOrderDrawer(o);
     case 'org': return orgModal(o);
+    case 'approvalCfg': return approvalConfigModal(o);
     case 'tempPassword': return tempPasswordModal(o.title, o.who, o.password);
     default: return '';
   }

@@ -289,6 +289,8 @@ function checkoutHTML(o) {
         <label class="field"><span class="label">Notas (opcional)</span><textarea class="textarea" id="co-notes" maxlength="500" placeholder="Horario de recepción, referencias…" oninput="S.overlay.notes=this.value">${esc(o.notes || '')}</textarea></label>
         <label class="privacy"><input type="checkbox" id="co-privacy" ${o.privacy ? 'checked' : ''} onchange="S.overlay.privacy=this.checked"> <span>Acepto que Obrix Nexo use mis datos para gestionar este pedido (Ley 29733).</span></label>
         ${o.errors.privacy ? `<div class="alert alert-danger">${esc(o.errors.privacy)}</div>` : ''}
+        <label class="privacy"><input type="checkbox" id="co-terms" ${o.terms ? 'checked' : ''} onchange="S.overlay.terms=this.checked"> <span>Leí y acepto los <a class="link" href="${esc(termsUrl())}" target="_blank" rel="noopener">términos y condiciones</a> de Obrix Nexo.</span></label>
+        ${o.errors.terms ? `<div class="alert alert-danger">${esc(o.errors.terms)}</div>` : ''}
       </div>
       <div class="summary">
         <div class="sumprod">${d.photoUrls?.[0] ? `<img src="${esc(fullUrl(d.photoUrls[0]))}" alt="">` : '<span></span>'}<b>${esc(d.title)}</b></div>
@@ -318,6 +320,7 @@ function validateCheckout(o) {
     if ((o.deliveryAddress || '').trim().length < 5) e.deliveryAddress = 'Escribe la dirección';
   }
   if (!o.privacy) e.privacy = 'Debes aceptar el uso de tus datos para gestionar el pedido.';
+  if (!o.terms) e.terms = 'Para pedir, acepta los términos y condiciones.';
   return e;
 }
 async function submitOrder(ev) {
@@ -332,7 +335,7 @@ async function submitOrder(ev) {
         items: [{ publicCode: o.d.publicCode, quantity: o.qty }],
         docType: o.docType, docNumber: o.docNumber.trim(), name: o.name.trim(), email: o.email.trim(), phone: o.phone.trim(),
         deliveryMode: o.deliveryMode, deliveryDistrict: o.deliveryDistrict || null, deliveryAddress: o.deliveryAddress || null,
-        notes: o.notes || null, acceptsPrivacyPolicy: true
+        notes: o.notes || null, acceptsPrivacyPolicy: true, acceptsTerms: true
       }
     });
     const mine = store.get('obrix.myOrders') || [];

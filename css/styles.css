@@ -469,3 +469,23 @@ a.link { color: var(--accent); font-weight: 600; text-decoration: underline; tex
   .modal.imp .imp-stack td:first-child { font-weight: 700; font-size: 12px; color: var(--ink-muted); }
   .modal.imp .imp-only-m { display: inline; }
 }
+
+/* ---------- términos, avisos y aprobación interna ---------- */
+.terms-card { max-width: 520px; }
+.terms-points { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; color: var(--ink-muted); }
+.drawer.drawer-sm { width: min(420px, 100%); }
+.drawer-h h3.crumb { margin: 0; }
+.notifs { list-style: none; margin: 0; padding: 0; }
+.notif { display: grid; gap: 3px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); padding: 14px 20px; font: inherit; color: var(--ink-muted); cursor: pointer; }
+.notif b { color: var(--ink); font-size: 14px; font-weight: 600; }
+.notif span { font-size: 13px; }
+.notif small { font-size: 12px; }
+.notif.unread { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.notif.unread b { font-weight: 700; }
+.notif:hover, .notif:focus-visible { background: var(--surface-sunken); }
+.toolbar.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.toolbar.filters .field { margin: 0; min-width: 150px; }
+.toolbar.filters .field.grow { flex: 1 1 220px; }
+.levels { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.tl.bad i { background: var(--danger); }
+.ac-sel { min-width: 130px; }

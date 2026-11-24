@@ -58,7 +58,8 @@ const DISTRICTS = ['Ate', 'Barranco', 'Breña', 'Callao', 'Carabayllo', 'Cercado
 
 const CONDITION = { NUEVO_SELLADO: 'Nuevo, sellado', NUEVO_ABIERTO: 'Nuevo, empaque abierto', USADO_BUEN_ESTADO: 'Usado, buen estado' };
 const LISTING_ST = {
-  DRAFT: ['Borrador', 'b-neutral'], PENDING_REVIEW: ['En revisión', 'b-warning'], OBSERVED: ['Observado', 'b-danger'],
+  DRAFT: ['Borrador', 'b-neutral'], PENDING_APPROVAL: ['Por aprobar', 'b-warning'], REJECTED: ['Rechazado', 'b-danger'],
+  PENDING_REVIEW: ['En revisión de Obrix', 'b-warning'], OBSERVED: ['Observado por Obrix', 'b-danger'],
   PUBLISHED: ['Publicado', 'b-success'], PAUSED: ['Pausado', 'b-neutral'], SOLD_OUT: ['Agotado', 'b-accent'], EXPIRED: ['Vencido', 'b-neutral']
 };
 const ORDER_ST = {
@@ -70,6 +71,11 @@ const PAYMENT_METHOD = { YAPE: 'Yape', PLIN: 'Plin', TRANSFERENCIA: 'Transferenc
 const DELIVERY = { RECOJO_EN_OBRA: 'Recojo en obra', POR_COORDINAR: 'Por coordinar', ENTREGA: 'Entrega a domicilio u obra' };
 const CANCEL_REASON = { CLIENTE_DESISTE: 'El comprador desistió', SIN_PAGO: 'Sin pago a tiempo', MATERIAL_NO_DISPONIBLE: 'Material no disponible', DATOS_INVALIDOS: 'Datos inválidos', OTRO: 'Otro motivo' };
 const badge = (map, key) => { const [t, c] = map[key] || [key, 'b-neutral']; return `<span class="badge ${c}">${esc(t)}</span>`; };
+/** Estado de un saldo; si espera aprobación, dice en qué nivel (Pendiente nivel 1 de 2). */
+const listingBadge = l => l.status === 'PENDING_APPROVAL'
+  ? `<span class="badge b-warning">Pendiente nivel ${l.approvalLevelCurrent}${l.approvalLevelsTotal > 1 ? ' de ' + l.approvalLevelsTotal : ''}</span>`
+  : badge(LISTING_ST, l.status);
+const termsUrl = () => S.session?.user?.termsUrl || S.ref.settings?.termsUrl || 'https://obrixnexo.com/terminos/';
 
 const ICON = {
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
@@ -89,6 +95,8 @@ const ICON = {
   inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.5-6.9A2 2 0 0016.8 4H7.2a2 2 0 00-1.7 1.1z"/></svg>',
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>',
   filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 3H2l8 9.5V19l4 2v-8.5z"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>',
+  stamp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V6a3 3 0 016 0v5M5 15h14l1 4H4zM7 11h10v4H7z"/></svg>',
   logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>'
 };
 const LOGO_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="8" height="14" rx="1" fill="#fff"/><rect x="13" y="10" width="8" height="10" rx="1" fill="#fff" fill-opacity=".6"/><path d="M11 12h2" stroke="#0f2a4a" stroke-width="2" stroke-linecap="round"/></svg>';
@@ -141,6 +149,9 @@ async function api(path, { method = 'GET', body } = {}) {
       logout(err.code === 'SESSION_INVALID' ? 'Tu acceso fue desactivado o cambió. Vuelve a ingresar.' : 'Tu sesión terminó. Vuelve a ingresar.');
     } else if (err.code === 'PASSWORD_CHANGE_REQUIRED') {
       S.view = 'password'; render();
+    } else if (err.code === 'TERMS_REQUIRED') {
+      if (S.session?.user) S.session.user.termsAccepted = false;
+      S.overlay = null; S.view = 'terms'; render();
     }
     throw err;
   }
@@ -174,6 +185,9 @@ const hasRole = r => roles().includes(r);
 const isStaff = () => hasRole('OPERADOR') || hasRole('ADMIN_OBRIX');
 const isCompanyAdmin = () => hasRole('ADMIN_EMPRESA');
 const isProjectAdmin = () => hasRole('ADMIN_PROYECTO') && !hasRole('ADMIN_EMPRESA');
+const approverLevel = () => S.session?.user?.approvalLevel ?? null;
+const isApprover = () => approverLevel() != null && !isStaff();
+const needsTerms = () => S.session && !isStaff() && S.session.user?.termsAccepted === false;
 const orgId = () => S.session?.user?.organizationId;
 
 function saveSession(login) {
@@ -192,7 +206,7 @@ async function refreshMe() {
 function logout(message) {
   S.session = null; store.del('obrix.session'); imgCache.clear();
   S.panel = { section: null, data: {}, loading: false, filter: 'ALL', projectId: null, edit: null };
-  S.overlay = null;
+  S.overlay = null; S.notifs = null; S.approvalsPending = 0; clearInterval(notifTimer); notifTimer = null;
   if (message) toast(message);
   navigate('#/ingresar');
 }
@@ -219,7 +233,12 @@ function route() {
   else if (first === 'panel') {
     if (!S.session) { S.view = 'login'; }
     else if (S.session.user?.mustChangePassword) { S.view = 'password'; }
-    else { S.view = 'panel'; openPanel(second); }
+    else if (needsTerms()) { S.view = 'terms'; }
+    else {
+      // Enlaces de los avisos: #/panel/aprobaciones?saldo=ID abre ese saldo al cargar la sección
+      S.panel.openId = new URLSearchParams(query || '').get('saldo');
+      S.view = 'panel'; openPanel(second);
+    }
   }
   else { S.view = 'home'; loadHome(); }
   render();
@@ -237,6 +256,7 @@ function render() {
     case 'track': html = viewTrack(); break;
     case 'login': html = viewLogin(); break;
     case 'password': html = viewChangePassword(); break;
+    case 'terms': html = viewTerms(); break;
     case 'panel': html = viewPanel(); break;
     default: html = viewHome();
   }

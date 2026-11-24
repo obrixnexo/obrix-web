@@ -10,6 +10,7 @@ const projName = id => (S.panel.data.projects || []).find(p => p.id === id)?.nam
 
 async function loadCompanySection(section) {
   const d = S.panel.data;
+  if (section === 'aprobaciones') return loadApprovals();
   const needs = {
     resumen: ['listings', 'orders', 'projects'], saldos: ['listings', 'projects'], publicar: ['projects'],
     pedidos: ['orders'], obras: ['projects'], perfiles: ['members', 'projects']
@@ -26,7 +27,7 @@ async function loadCompanySection(section) {
 function companyCounts() {
   const d = S.panel.data;
   return {
-    saldos: (d.listings || []).filter(l => l.status === 'OBSERVED').length || '',
+    saldos: (d.listings || []).filter(l => l.status === 'OBSERVED' || l.status === 'REJECTED').length || '',
     pedidos: (d.orders || []).filter(o => o.status === 'CONFIRMED').length || ''
   };
 }
@@ -36,12 +37,13 @@ function companyPage(cur) {
   const company = isCompanyAdmin() ? 'Tu constructora' : 'Tu obra';
   switch (cur) {
     case 'resumen': return { title: 'Resumen', sub: company, content: resumenContent(), counts: companyCounts() };
+    case 'aprobaciones': return approvalsPage();
     case 'saldos': return {
       title: isCompanyAdmin() ? 'Saldos' : 'Mis saldos', sub: 'Lo que publicaste y en qué estado está',
       actions: `<div class="actions" style="gap:8px"><button class="btn btn-secondary" onclick="openImport()">${ICON.upload} Cargar desde Excel</button><button class="btn btn-primary" onclick="newListing()">${ICON.plus} Publicar saldo</button></div>`,
       content: listingsContent(), counts: companyCounts()
     };
-    case 'publicar': return { title: S.panel.edit ? 'Editar saldo' : 'Publicar saldo', sub: S.panel.edit ? esc(S.panel.edit.publicCode) : 'Crea el saldo, sube fotos y envíalo a revisión de Obrix', content: publishForm() };
+    case 'publicar': return { title: S.panel.edit ? 'Editar saldo' : 'Publicar saldo', sub: S.panel.edit ? esc(S.panel.edit.publicCode) : 'Crea el saldo, sube fotos y envíalo a aprobación de tu constructora', content: publishForm() };
     case 'pedidos': return { title: 'Pedidos', sub: 'Lo que compraron de tus saldos y lo que vas a recibir', content: ordersContent(), counts: companyCounts() };
     case 'obras': return {
       title: 'Obras', sub: 'Cada saldo pertenece a una obra',
@@ -62,15 +64,17 @@ function resumenContent() {
   const toDeliver = O.filter(o => o.status === 'CONFIRMED');
   const toReceive = O.filter(o => ['CONFIRMED', 'DELIVERED'].includes(o.status));
   const closed = O.filter(o => o.status === 'CLOSED');
-  const observed = L.filter(l => l.status === 'OBSERVED');
+  const observed = L.filter(l => l.status === 'OBSERVED' || l.status === 'REJECTED');
+  const waiting = L.filter(l => l.status === 'PENDING_APPROVAL').length, inReview = L.filter(l => l.status === 'PENDING_REVIEW').length;
   return `<div class="stats">
-      <div class="stat"><div class="label">Saldos publicados</div><div class="v">${L.filter(l => l.status === 'PUBLISHED').length}</div><div class="s">${L.filter(l => l.status === 'PENDING_REVIEW').length} en revisión de Obrix</div></div>
-      <div class="stat"><div class="label">Observados</div><div class="v">${observed.length}</div><div class="s">${observed.length ? 'Requieren tu acción' : 'Nada pendiente'}</div></div>
+      <div class="stat"><div class="label">Saldos publicados</div><div class="v">${L.filter(l => l.status === 'PUBLISHED').length}</div><div class="s">${waiting} por aprobar · ${inReview} en revisión de Obrix</div></div>
+      <div class="stat"><div class="label">Para corregir</div><div class="v">${observed.length}</div><div class="s">${observed.length ? 'Rechazados u observados' : 'Nada pendiente'}</div></div>
       <div class="stat"><div class="label">Por entregar</div><div class="v">${toDeliver.length}</div><div class="s">Pedidos pagados esperando recojo</div></div>
       <div class="stat"><div class="label">Por recibir</div><div class="v">${money0(sum(toReceive))}</div><div class="s">Obrix te liquida tras la entrega</div></div>
       <div class="stat"><div class="label">Recuperado</div><div class="v">${money0(sum(closed))}</div><div class="s">${closed.length} ${closed.length === 1 ? 'pedido liquidado' : 'pedidos liquidados'}</div></div>
     </div>
-    ${observed.length ? `<div class="banner">${ICON.shield}<span>Tienes ${observed.length} ${observed.length === 1 ? 'saldo observado' : 'saldos observados'} por Obrix. <button class="btn btn-secondary btn-sm" onclick="S.panel.nextFilter='OBSERVED'; goPanel('saldos')">Revisar</button></span></div>` : ''}
+    ${isApprover() && S.approvalsPending ? `<div class="banner">${ICON.stamp}<span>Tienes ${S.approvalsPending} ${S.approvalsPending === 1 ? 'saldo esperando' : 'saldos esperando'} tu aprobación. <button class="btn btn-primary btn-sm" onclick="goPanel('aprobaciones')">Revisar</button></span></div>` : ''}
+    ${observed.length ? `<div class="banner">${ICON.shield}<span>Tienes ${observed.length} ${observed.length === 1 ? 'saldo para corregir' : 'saldos para corregir'} (rechazados por tu constructora u observados por Obrix). <button class="btn btn-secondary btn-sm" onclick="S.panel.nextFilter='${L.some(l => l.status === 'REJECTED') ? 'REJECTED' : 'OBSERVED'}'; goPanel('saldos')">Revisar</button></span></div>` : ''}
     <h3 style="font-size:15px">Obras</h3>${projectCards()}
     <h3 style="font-size:15px">Últimos pedidos</h3>${ordersTable(O.slice(0, 5))}`;
 }
@@ -88,7 +92,7 @@ function projectCards() {
 function listingsContent() {
   const L = S.panel.data.listings || [], f = S.panel.filter;
   const rows = L.filter(l => f === 'ALL' || l.status === f);
-  const opts = [['ALL', 'Todos'], ['DRAFT', 'Borradores'], ['PENDING_REVIEW', 'En revisión'], ['OBSERVED', 'Observados'], ['PUBLISHED', 'Publicados'], ['PAUSED', 'Pausados'], ['SOLD_OUT', 'Agotados'], ['EXPIRED', 'Vencidos']];
+  const opts = [['ALL', 'Todos'], ['DRAFT', 'Borradores'], ['PENDING_APPROVAL', 'Por aprobar'], ['REJECTED', 'Rechazados'], ['PENDING_REVIEW', 'En revisión de Obrix'], ['OBSERVED', 'Observados'], ['PUBLISHED', 'Publicados'], ['PAUSED', 'Pausados'], ['SOLD_OUT', 'Agotados'], ['EXPIRED', 'Vencidos']];
   return `${chips(opts, f, 'setFilter')}
     ${rows.length ? `<div class="tablewrap"><table><thead><tr><th>Saldo</th><th>Obra</th><th>Disponible</th><th>Precio comprador</th><th>Recojo hasta</th><th>Estado</th></tr></thead><tbody>
       ${rows.map(l => `<tr class="click" tabindex="0" onclick="openListing('${l.id}')" onkeydown="if(event.key==='Enter')openListing('${l.id}')">
@@ -97,7 +101,7 @@ function listingsContent() {
         <td class="num">${qty(l.quantityAvailable)} <small class="muted">de ${esc(uqty(l.quantityTotal, l.unitCode))}</small></td>
         <td class="num">${money(l.price.unitPriceWithIgv)}<br><small class="muted">recibes ${money(l.price.netUnitPrice)}</small></td>
         <td>${fmtDate(l.pickupDeadline)}</td>
-        <td>${badge(LISTING_ST, l.status)}${l.status === 'OBSERVED' && l.reviewNote ? `<br><small class="muted">${esc(l.reviewNote)}</small>` : ''}</td></tr>`).join('')}
+        <td>${listingBadge(l)}${l.status === 'OBSERVED' && l.reviewNote ? `<br><small class="muted">${esc(l.reviewNote)}</small>` : ''}${l.status === 'REJECTED' && l.rejectionNote ? `<br><small class="muted">Nivel ${l.rejectedLevel}: ${esc(l.rejectionNote)}</small>` : ''}</td></tr>`).join('')}
     </tbody></table></div>` : noData('Nada en esta vista', 'Publica tu primer saldo con el botón "Publicar saldo".')}`;
 }
 function newListing() { S.panel.edit = null; S.panel.form = null; goPanel('publicar'); }
@@ -198,12 +202,12 @@ function listingBody(f) {
 async function submitListing(e) {
   e.preventDefault();
   const f = S.panel.form;
-  if (!f.editId && !f.onlyDraft && !f.files.length) { toast('Agrega al menos una foto para enviar a revisión (o guárdalo como borrador).'); return; }
+  if (!f.editId && !f.onlyDraft && !f.files.length) { toast('Agrega al menos una foto para enviarlo a aprobación (o guárdalo como borrador).'); return; }
   f.busy = true; render();
   try {
     if (f.editId) {
       const l = await api(orgPath(`/listings/${f.editId}`), { method: 'PUT', body: listingBody(f) });
-      toast(l.status === 'PENDING_REVIEW' ? 'Guardado. Volvió a revisión de Obrix.' : 'Cambios guardados.');
+      toast(l.status === 'PENDING_APPROVAL' ? 'Guardado. Volvió a aprobación de tu constructora (nivel 1).' : 'Cambios guardados.');
       S.panel.form = null; S.panel.edit = null; goPanel('saldos'); setTimeout(() => openListing(l.id), 200);
       return;
     }
@@ -214,10 +218,12 @@ async function submitListing(e) {
       try { l = await api(orgPath(`/listings/${l.id}/photos`), { method: 'POST', body: fd }); } catch (err) { failed++; toast(`Foto no subida: ${err.message}`); }
     }
     if (!f.onlyDraft && l.photos.length) {
-      l = await api(orgPath(`/listings/${l.id}/submit`), { method: 'POST' });
-      toast(`Saldo ${l.publicCode} enviado. Obrix lo revisa y lo publica.`);
+      try {
+        l = await api(orgPath(`/listings/${l.id}/submit`), { method: 'POST' });
+        toast(`Saldo ${l.publicCode} enviado a aprobación de tu constructora.`);
+      } catch (err) { toast(`Se guardó como borrador ${l.publicCode}, pero no se pudo enviar: ${err.message}`); }
     } else {
-      toast(failed ? 'Se guardó como borrador: revisa las fotos y envíalo a revisión.' : `Borrador ${l.publicCode} guardado.`);
+      toast(failed ? 'Se guardó como borrador: revisa las fotos y envíalo a aprobación.' : `Borrador ${l.publicCode} guardado.`);
     }
     f.files.forEach(x => URL.revokeObjectURL(x.url));
     S.panel.form = null; S.panel.filter = 'ALL'; goPanel('saldos');
@@ -227,8 +233,10 @@ async function submitListing(e) {
 /* ---------------- detalle de un saldo ---------------- */
 async function openListing(id) {
   openOverlay({ kind: 'listing', loading: true });
-  try { openOverlay({ kind: 'listing', l: await api(orgPath(`/listings/${id}`)) }); }
-  catch (e) { closeOverlay(); fail(e); }
+  try { openOverlay({ kind: 'listing', l: await api(orgPath(`/listings/${id}`)), timeline: null }); }
+  catch (e) { closeOverlay(); fail(e); return; }
+  const events = await loadTimeline(orgId(), id);
+  if (S.overlay?.kind === 'listing' && S.overlay.l?.id === id) { S.overlay.timeline = events; renderOverlay(); }
 }
 async function listingAction(path, method = 'POST', body, okMsg) {
   const o = S.overlay;
@@ -236,6 +244,7 @@ async function listingAction(path, method = 'POST', body, okMsg) {
     o.l = await api(orgPath(`/listings/${o.l.id}${path}`), { method, body });
     if (okMsg) toast(okMsg);
     renderOverlay(); refreshListingsInBackground();
+    if (path === '/submit') loadTimeline(orgId(), o.l.id).then(ev => { if (S.overlay === o) { o.timeline = ev; renderOverlay(); } });
   } catch (e) { fail(e); }
 }
 function refreshListingsInBackground() {
@@ -257,29 +266,35 @@ function makeCover(photoId) {
 function editListing() { S.panel.edit = S.overlay.l; S.panel.form = null; closeOverlay(); goPanel('publicar'); }
 function listingDrawer(o) {
   if (o.loading) return `<div class="scrim" onclick="closeOverlay()"></div><aside class="drawer"><div class="drawer-b">${loadingBox()}</div></aside>`;
-  const l = o.l, st = l.status, editable = ['DRAFT', 'PENDING_REVIEW', 'OBSERVED', 'PUBLISHED', 'PAUSED'].includes(st);
+  const l = o.l, st = l.status, editable = ['DRAFT', 'REJECTED', 'PENDING_REVIEW', 'OBSERVED', 'PUBLISHED', 'PAUSED'].includes(st);
   const p = l.price, sp = l.suggestedPrice;
   const actions = [];
-  if (st === 'DRAFT') actions.push(`<button class="btn btn-primary" onclick="listingAction('/submit','POST',undefined,'Enviado a revisión de Obrix.')">${ICON.check} Enviar a revisión</button>`);
+  if (st === 'DRAFT') actions.push(`<button class="btn btn-primary" onclick="listingAction('/submit','POST',undefined,'Enviado a aprobación de tu constructora.')">${ICON.check} Enviar a aprobación</button>`);
+  if (st === 'REJECTED') {
+    actions.push(`<button class="btn btn-primary" onclick="editListing()">Corregir y reenviar</button>`);
+    actions.push(`<button class="btn btn-secondary" onclick="listingAction('/submit','POST',undefined,'Reenviado a aprobación (nivel 1).')">Reenviar sin cambios</button>`);
+  }
   if (st === 'OBSERVED') {
     if (sp) actions.push(`<button class="btn btn-primary" onclick="listingAction('/accept-suggested-price','POST',undefined,'Precio aceptado: el saldo ya está publicado.')">Aceptar ${money(sp.netUnitPrice)} y publicar</button>`);
-    actions.push(`<button class="btn btn-secondary" onclick="listingAction('/submit','POST',undefined,'Reenviado a revisión.')">Reenviar sin cambios</button>`);
+    actions.push(`<button class="btn btn-secondary" onclick="listingAction('/submit','POST',undefined,'Reenviado a aprobación (nivel 1).')">Reenviar sin cambios</button>`);
   }
   if (st === 'PUBLISHED') actions.push(`<button class="btn btn-secondary" onclick="listingAction('/pause','POST',undefined,'Saldo pausado.')">Pausar</button>`);
   if (st === 'PAUSED') actions.push(`<button class="btn btn-primary" onclick="listingAction('/resume','POST',undefined,'Saldo publicado de nuevo.')">Reanudar</button>`);
-  if (['PUBLISHED', 'PAUSED', 'SOLD_OUT', 'DRAFT', 'PENDING_REVIEW', 'OBSERVED'].includes(st)) actions.push(`<button class="btn btn-ghost" onclick="S.overlay.stock=true; renderOverlay()">Ajustar cantidad</button>`);
-  if (editable) actions.push(`<button class="btn btn-ghost" onclick="editListing()">Editar datos</button>`);
+  if (['PUBLISHED', 'PAUSED', 'SOLD_OUT', 'DRAFT', 'PENDING_APPROVAL', 'REJECTED', 'PENDING_REVIEW', 'OBSERVED'].includes(st)) actions.push(`<button class="btn btn-ghost" onclick="S.overlay.stock=true; renderOverlay()">Ajustar cantidad</button>`);
+  if (editable && st !== 'REJECTED') actions.push(`<button class="btn btn-ghost" onclick="editListing()">Editar datos</button>`);
   return `<div class="scrim" onclick="closeOverlay()"></div>
   <aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(l.title)}">
-    <div class="drawer-h"><button class="iconbtn" onclick="closeOverlay()" aria-label="Cerrar">${ICON.x}</button><span class="crumb"><b style="color:var(--ink)">${esc(l.publicCode)}</b> · ${esc(projName(l.projectId))}</span>${badge(LISTING_ST, st)}</div>
+    <div class="drawer-h"><button class="iconbtn" onclick="closeOverlay()" aria-label="Cerrar">${ICON.x}</button><span class="crumb"><b style="color:var(--ink)">${esc(l.publicCode)}</b> · ${esc(projName(l.projectId))}</span>${listingBadge(l)}</div>
     <div class="drawer-b"><div class="dcontent">
       <div><span class="eyebrow">${esc(categoryName(l.categoryId))} · ${esc(CONDITION[l.condition])}</span><h2 class="dname">${esc(l.title)}</h2></div>
       ${st === 'OBSERVED' ? `<div class="box internal"><h4>Observación de Obrix</h4><p>${esc(l.reviewNote || '')}</p>${sp ? `<p>Obrix propone un precio neto de <b>${money(sp.netUnitPrice)}</b> (el comprador vería ${money(sp.unitPriceWithIgv)}). Puedes aceptarlo con un clic o editar el saldo.</p>` : '<p class="help">Corrige lo indicado (datos o fotos) y vuelve a enviarlo.</p>'}</div>` : ''}
-      ${st === 'PENDING_REVIEW' ? `<div class="banner">${ICON.shield}<span>Obrix está revisando este saldo. Te avisaremos si hay que corregir algo.</span></div>` : ''}
+      ${st === 'PENDING_REVIEW' ? `<div class="banner">${ICON.shield}<span>Tu constructora ya lo aprobó. Obrix lo está revisando y te avisaremos cuando esté en la tienda.</span></div>` : ''}
+      ${st === 'PENDING_APPROVAL' ? `<div class="banner">${ICON.stamp}<span>Esperando la aprobación de tu constructora: nivel ${l.approvalLevelCurrent}${l.approvalLevelsTotal > 1 ? ' de ' + l.approvalLevelsTotal : ''}. Mientras tanto no se puede editar.</span></div>` : ''}
+      ${st === 'REJECTED' ? `<div class="box internal"><h4>Rechazado en el nivel ${l.rejectedLevel}</h4><p>${esc(l.rejectionNote || '')}</p><p class="help">Corrige lo indicado y reenvíalo: vuelve a empezar en el nivel 1.</p></div>` : ''}
       ${st === 'EXPIRED' ? `<div class="banner">Pasó la fecha límite de recojo. Para volver a ofrecerlo, crea un saldo nuevo.</div>` : ''}
       <div class="box"><h4>Fotos <span class="muted" style="font-weight:400;font-size:12px">${l.photos.length}/8</span></h4>
         ${l.photos.length ? `<div class="photo-grid">${l.photos.map((ph, i) => `<div class="photo-item">${authImg(ph.url)}${i === 0 ? '<span class="cover">Portada</span>' : ''}${editable ? `<div class="ph-actions">${i > 0 ? `<button onclick="makeCover('${ph.id}')">Portada</button>` : ''}<button onclick="if(confirm('¿Quitar esta foto?'))listingAction('/photos/${ph.id}','DELETE',undefined,'Foto quitada.')">Quitar</button></div>` : ''}</div>`).join('')}</div>` : '<p class="help">Sin fotos todavía.</p>'}
-        ${editable && l.photos.length < 8 ? `<label class="btn btn-secondary btn-sm" style="justify-self:start">${ICON.upload} Subir fotos<input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onchange="uploadListingPhotos(this)"></label>${st === 'PUBLISHED' || st === 'PAUSED' ? '<p class="help">Agregar una foto a un saldo publicado lo devuelve a revisión.</p>' : ''}` : ''}
+        ${editable && l.photos.length < 8 ? `<label class="btn btn-secondary btn-sm" style="justify-self:start">${ICON.upload} Subir fotos<input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onchange="uploadListingPhotos(this)"></label>${st === 'PUBLISHED' || st === 'PAUSED' ? '<p class="help">Agregar una foto a un saldo publicado lo devuelve a la revisión de Obrix.</p>' : ''}` : ''}
       </div>
       ${o.stock ? `<form class="box" onsubmit="event.preventDefault(); listingAction('/stock','PUT',{quantityAvailable:Number(val('st-qty'))},'Cantidad actualizada.'); S.overlay.stock=false">
         <h4>Ajustar cantidad disponible</h4>
@@ -299,6 +314,7 @@ function listingDrawer(o) {
         ${l.publishedAt ? `<dt>Publicado</dt><dd>${fmtDT(l.publishedAt)}</dd>` : ''}
         ${st === 'PUBLISHED' ? `<dt>En el catálogo</dt><dd><a class="link" href="#/saldo/${esc(l.publicCode)}" target="_blank" rel="noopener">Ver como comprador</a></dd>` : ''}
       </dl>
+      ${timelineHTML(o.timeline)}
     </div></div>
     <div class="drawer-f" style="flex-wrap:wrap">${actions.join('') || '<span class="muted" style="font-size:13px">Sin acciones disponibles</span>'}</div>
   </aside>`;
@@ -380,7 +396,7 @@ function membersContent() {
   const me = S.session.user.id;
   return `<div class="tablewrap"><table><thead><tr><th>Nombre</th><th>Rol</th><th>Obras</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead><tbody>
     ${M.map(m => `<tr><td><b>${esc(m.fullName)}</b>${m.userId === me ? ' <small class="muted">(tú)</small>' : ''}<br><small class="muted">${esc(m.email)}${m.phone ? ' · ' + esc(m.phone) : ''}</small></td>
-      <td>${m.role === 'ADMIN_EMPRESA' ? 'Admin Empresa' : 'Admin Proyecto'}</td>
+      <td>${m.role === 'ADMIN_EMPRESA' ? 'Admin Empresa' : 'Admin Proyecto'}${m.approvalLevel ? `<br><span class="badge b-accent">Aprobador nivel ${m.approvalLevel}${m.approvalLabel ? ' · ' + esc(m.approvalLabel) : ''}</span>` : ''}</td>
       <td>${m.role === 'ADMIN_EMPRESA' ? '<small class="muted">Todas</small>' : m.projects.map(p => `<span class="badge b-accent">${esc(p.name)}</span>`).join(' ') || '—'}</td>
       <td>${m.status === 'ACTIVE' ? (m.mustChangePassword ? '<span class="badge b-warning">Pendiente de ingresar</span>' : '<span class="badge b-success">Activo</span>') : '<span class="badge b-neutral">Desactivado</span>'}</td>
       <td>${fmtDT(m.lastLoginAt)}</td>
@@ -459,6 +475,7 @@ function companyOverlayHTML(o) {
     case 'assign': return assignModal(o);
     case 'tempPassword': return tempPasswordModal(o.title, o.who, o.password);
     case 'import': return importModal(o);
+    case 'approval': return approvalDrawer(o);
     default: return '';
   }
 }

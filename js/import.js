@@ -7,7 +7,7 @@
  *    reglas del formulario. Muestra qué filas están listas y cuáles tienen errores (y por qué).
  * 3. "Crear saldos": crea cada fila con el mismo servicio del formulario (POST /listings),
  *    así la API vuelve a validar todo. Los saldos quedan en BORRADOR: luego se les agregan
- *    fotos y se envían a revisión de Obrix, igual que uno creado a mano.
+ *    fotos y se envían a aprobación de la constructora, igual que uno creado a mano.
  *
  * La librería ExcelJS (vendor/exceljs, licencia MIT) se carga solo al abrir esta ventana.
  * ===================================================================== */
@@ -165,7 +165,7 @@ function importPreview(o) {
         ${ok.slice(0, SHOW).map(r => `<tr><td class="num">${r.row}</td><td class="imp-t">${esc(short(r.data.title))}</td><td>${esc(projects.get(r.data.projectId) || '—')}</td>
           <td class="num">${esc(uqty(r.data.quantityTotal, r.data.unitCode))}</td><td class="num">${money(r.data.netUnitPrice)}</td><td>${fmtDate(r.data.pickupDeadline)}</td></tr>`).join('')}
         </tbody></table></div>${ok.length > SHOW ? `<p class="muted">…y ${ok.length - SHOW} más.</p>` : ''}</div>` : ''}
-      <div class="banner">${ICON.shield}<span>Se crean como <b>borradores</b>. Después abre cada uno, agrega al menos una foto y envíalo a revisión de Obrix.</span></div>
+      <div class="banner">${ICON.shield}<span>Se crean como <b>borradores</b>. Después abre cada uno, agrega al menos una foto y envíalo a aprobación de tu constructora.</span></div>
     </div>
     <div class="modal-f">
       <button type="button" class="btn btn-secondary" onclick="S.overlay={kind:'import',phase:'start'}; renderOverlay()">Subir otro archivo</button>
@@ -194,7 +194,7 @@ function importDone(o) {
       ${failed.length ? `<div><h4 class="imp-h">No se pudieron crear</h4><div class="tablewrap"><table><thead><tr><th>Fila</th><th>Material</th><th>Motivo</th></tr></thead><tbody>
         ${failed.slice(0, 100).map(r => `<tr><td class="num">${r.row}</td><td class="imp-t">${esc(short(r.data.title))}</td><td>${esc(r.result?.msg || 'No se intentó: la carga se detuvo.')}</td></tr>`).join('')}
         </tbody></table></div></div>` : ''}
-      ${created.length ? `<div class="banner">${ICON.shield}<span><b>Siguiente paso:</b> en "Borradores", abre cada saldo, agrega al menos una foto y presiona "Enviar a revisión".</span></div>` : ''}
+      ${created.length ? `<div class="banner">${ICON.shield}<span><b>Siguiente paso:</b> en "Borradores", abre cada saldo, agrega al menos una foto y presiona "Enviar a aprobación".</span></div>` : ''}
       ${pending ? `<p class="muted" style="margin:0">Descarga las filas que faltan, corrígelas y vuelve a subir ese archivo.</p>` : ''}
     </div>
     <div class="modal-f">
@@ -271,7 +271,7 @@ async function downloadImportTemplate() {
       'Tu precio es lo que quieres recibir por unidad, sin IGV. Obrix calcula el precio que ve el comprador.',
       'Fecha límite de recojo: día/mes/año (por ejemplo 31/12/2026). No puede ser una fecha pasada.',
       `Máximo ${IMPORT_MAX_ROWS} saldos por archivo.`,
-      'Las fotos no van en el Excel. Después de la carga, abre cada saldo en "Borradores", agrega sus fotos y envíalo a revisión.',
+      'Las fotos no van en el Excel. Después de la carga, abre cada saldo en "Borradores", agrega sus fotos y envíalo a aprobación.',
       'Si una fila tiene errores, la plataforma te dice cuál y qué corregir. Las filas que ya se crearon se omiten si vuelves a subir el archivo.'
     ];
     help.getCell('B1').value = 'Cómo llenar la plantilla de saldos de Obrix Nexo';
