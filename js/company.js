@@ -36,7 +36,7 @@ function companyPage(cur) {
   const d = S.panel.data;
   const company = isCompanyAdmin() ? 'Tu constructora' : 'Tu obra';
   switch (cur) {
-    case 'resumen': return { title: 'Resumen', sub: company, content: resumenContent(), counts: companyCounts() };
+    case 'resumen': return { title: 'Resumen', sub: company, content: dashboardContent(), counts: companyCounts() };
     case 'aprobaciones': return approvalsPage();
     case 'saldos': return {
       title: isCompanyAdmin() ? 'Saldos' : 'Mis saldos', sub: 'Lo que publicaste y en qué estado está',
@@ -58,26 +58,6 @@ function companyPage(cur) {
 }
 
 /* ---------------- resumen ---------------- */
-function resumenContent() {
-  const d = S.panel.data, L = d.listings || [], O = d.orders || [];
-  const sum = (arr) => arr.reduce((a, o) => a + num(o.netTotal), 0);
-  const toDeliver = O.filter(o => o.status === 'CONFIRMED');
-  const toReceive = O.filter(o => ['CONFIRMED', 'DELIVERED'].includes(o.status));
-  const closed = O.filter(o => o.status === 'CLOSED');
-  const observed = L.filter(l => l.status === 'OBSERVED' || l.status === 'REJECTED');
-  const waiting = L.filter(l => l.status === 'PENDING_APPROVAL').length, inReview = L.filter(l => l.status === 'PENDING_REVIEW').length;
-  return `<div class="stats">
-      <div class="stat"><div class="label">Saldos publicados</div><div class="v">${L.filter(l => l.status === 'PUBLISHED').length}</div><div class="s">${waiting} por aprobar · ${inReview} en revisión de Obrix</div></div>
-      <div class="stat"><div class="label">Para corregir</div><div class="v">${observed.length}</div><div class="s">${observed.length ? 'Rechazados u observados' : 'Nada pendiente'}</div></div>
-      <div class="stat"><div class="label">Por entregar</div><div class="v">${toDeliver.length}</div><div class="s">Pedidos pagados esperando recojo</div></div>
-      <div class="stat"><div class="label">Por recibir</div><div class="v">${money0(sum(toReceive))}</div><div class="s">Obrix te liquida tras la entrega</div></div>
-      <div class="stat"><div class="label">Recuperado</div><div class="v">${money0(sum(closed))}</div><div class="s">${closed.length} ${closed.length === 1 ? 'pedido liquidado' : 'pedidos liquidados'}</div></div>
-    </div>
-    ${isApprover() && S.approvalsPending ? `<div class="banner">${ICON.stamp}<span>Tienes ${S.approvalsPending} ${S.approvalsPending === 1 ? 'saldo esperando' : 'saldos esperando'} tu aprobación. <button class="btn btn-primary btn-sm" onclick="goPanel('aprobaciones')">Revisar</button></span></div>` : ''}
-    ${observed.length ? `<div class="banner">${ICON.shield}<span>Tienes ${observed.length} ${observed.length === 1 ? 'saldo para corregir' : 'saldos para corregir'} (rechazados por tu constructora u observados por Obrix). <button class="btn btn-secondary btn-sm" onclick="S.panel.nextFilter='${L.some(l => l.status === 'REJECTED') ? 'REJECTED' : 'OBSERVED'}'; goPanel('saldos')">Revisar</button></span></div>` : ''}
-    <h3 style="font-size:15px">Obras</h3>${projectCards()}
-    <h3 style="font-size:15px">Últimos pedidos</h3>${ordersTable(O.slice(0, 5))}`;
-}
 function projectCards() {
   const d = S.panel.data, P = d.projects || [], L = d.listings || [], O = d.orders || [];
   if (!P.length) return noData('Sin obras', 'Crea tu primera obra para publicar saldos.');

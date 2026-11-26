@@ -14,6 +14,8 @@ Son archivos HTML, CSS y JavaScript sin compilar: se abren en el navegador y hab
   js/auth.js      ingreso, cambio de contraseña y armazón del panel
   js/company.js   panel de la constructora (Admin Empresa y Admin Proyecto)
   js/import.js    carga masiva de saldos desde Excel (plantilla, revisión fila por fila y creación)
+  js/dashboard.js tablero de la gerencia (Resumen): recuperado, flujo de saldos, por vencer y ventas
+                  por mes, por obra y por material, con detalle al pasar el mouse y tabla
   js/approval.js  aprobación interna (bandeja del aprobador, ficha, historial), avisos (campanita) y
                   configuración de aprobadores en el panel de Obrix
   vendor/         librerías de terceros guardadas aquí (ExcelJS y JSZip, licencia MIT; se cargan solo al usar la carga masiva)

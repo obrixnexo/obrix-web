@@ -109,7 +109,7 @@ function openPanel(section) {
   startNotifications();
   if (S.panel.section !== target || !S.panel.loaded) {
     S.panel.section = target; S.panel.filter = S.panel.nextFilter || 'ALL'; S.panel.nextFilter = null;
-    S.panel.q = ''; S.panel.data = {}; S.panel.loaded = false; S.panel.af = {};
+    S.panel.q = ''; S.panel.data = {}; S.panel.loaded = false; S.panel.af = {}; S.panel.heroDone = false;
     if (target !== 'publicar') S.panel.edit = null;
     loadSection();
   } else if (S.panel.openId) {
