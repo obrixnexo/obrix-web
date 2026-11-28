@@ -125,7 +125,7 @@ function publishForm() {
   const inp = (k, label, o = {}) => `<label class="field"><span class="label">${label}</span><input class="input ${o.num ? 'num' : ''}" id="pf-${k}" ${o.type ? `type="${o.type}"` : ''} ${o.step ? `step="${o.step}"` : ''} ${o.min != null ? `min="${o.min}"` : ''} ${o.max ? `maxlength="${o.max}"` : ''} ${o.req ? 'required' : ''} value="${esc(f[k])}" placeholder="${esc(o.ph || '')}" oninput="pf('${k}', this.value)">${o.help ? `<span class="help">${o.help}</span>` : ''}</label>`;
   const sel = (k, label, options) => `<label class="field"><span class="label">${label}</span><select class="select" id="pf-${k}" onchange="pf('${k}', this.value)">${options.map(([v, l]) => `<option value="${esc(v)}" ${String(f[k]) === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
   return `<form style="display:grid;gap:20px" onsubmit="submitListing(event)">
-    ${f.editId ? `<div class="banner">${ICON.shield}<span>Si el saldo ya estaba enviado o publicado, al guardar vuelve a revisión de Obrix. Las fotos se cambian desde el detalle del saldo.</span></div>` : `
+    ${f.editId ? `<div class="banner">${ICON.shield}<span>Si el saldo ya estaba enviado, rechazado o publicado, al guardar vuelve a aprobación de tu constructora (nivel 1). Las fotos se cambian desde el detalle del saldo.</span></div>` : `
     <div class="form-card"><h3>Fotos del material (hasta 8)</h3>
       ${f.files.length ? `<div class="photo-grid">${f.files.map((x, i) => `<div class="photo-item"><img src="${x.url}" alt="">${i === 0 ? '<span class="cover">Portada</span>' : ''}<div class="ph-actions"><button type="button" onclick="removeDraftFile(${i})">Quitar</button></div></div>`).join('')}</div>` : ''}
       <div class="upload">${ICON.upload}<span>Toma la foto en obra con buena luz y el material completo a la vista. JPG, PNG o WebP de hasta 5 MB.</span>
@@ -157,7 +157,7 @@ function publishForm() {
       <button type="button" class="btn btn-secondary" onclick="S.panel.form=null; S.panel.edit=null; goPanel('saldos')">Cancelar</button>
       ${f.editId ? `<button class="btn btn-primary" type="submit" ${f.busy ? 'disabled' : ''}>${f.busy ? 'Guardando…' : 'Guardar cambios'}</button>`
         : `<button class="btn btn-secondary" type="submit" name="draft" onclick="S.panel.form.onlyDraft=true" ${f.busy ? 'disabled' : ''}>Guardar borrador</button>
-           <button class="btn btn-primary" type="submit" onclick="S.panel.form.onlyDraft=false" ${f.busy ? 'disabled' : ''}>${f.busy ? 'Enviando…' : ICON.check + ' Enviar a revisión de Obrix'}</button>`}
+           <button class="btn btn-primary" type="submit" onclick="S.panel.form.onlyDraft=false" ${f.busy ? 'disabled' : ''}>${f.busy ? 'Enviando…' : ICON.check + ' Enviar a aprobación'}</button>`}
     </div>
   </form>`;
 }
@@ -233,6 +233,8 @@ function refreshListingsInBackground() {
 async function uploadListingPhotos(input) {
   const o = S.overlay;
   for (const file of input.files) {
+    if (file.size > 5 * 1024 * 1024) { toast(`"${file.name}" pesa más de 5 MB. Reduce la foto e intenta de nuevo.`); continue; }
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { toast(`"${file.name}" no es una foto JPG, PNG o WEBP.`); continue; }
     const fd = new FormData(); fd.append('file', file);
     try { o.l = await api(orgPath(`/listings/${o.l.id}/photos`), { method: 'POST', body: fd }); renderOverlay(); }
     catch (e) { fail(e); }

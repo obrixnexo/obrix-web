@@ -39,7 +39,7 @@ function obrixPage(cur) {
             <td class="num">${esc(uqty(i.quantityTotal, i.unitCode))}</td><td class="num">${money(i.netUnitPrice)}</td>
             <td>${fmtDate(i.pickupDeadline)}</td><td>${fmtDT(i.submittedAt)}</td>
             <td><button class="btn btn-primary btn-sm">Revisar</button></td></tr>`).join('')}
-        </tbody></table></div>` : noData('Nada por revisar', 'Los saldos que envían las constructoras llegan aquí.')}`,
+        </tbody></table></div>` : noData('Nada por revisar', 'Llegan aquí los saldos que ya aprobó su constructora.')}`,
       counts: { revision: f === 'ALL' ? (d.queue?.totalItems || '') : '' }
     };
   }

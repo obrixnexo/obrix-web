@@ -257,8 +257,16 @@ function startCheckout() {
 function coField(id, label, o = {}) {
   const err = S.overlay.errors[id];
   return `<label class="field ${err ? 'err' : ''}"><span class="label">${label}</span>
-    <input class="input" id="co-${id}" value="${esc(S.overlay[id] || '')}" ${o.type ? `type="${o.type}"` : ''} ${o.mode ? `inputmode="${o.mode}"` : ''} ${o.max ? `maxlength="${o.max}"` : ''} placeholder="${esc(o.ph || '')}" oninput="S.overlay['${id}']=this.value">
+    <input class="input" id="co-${id}" value="${esc(S.overlay[id] || '')}" ${o.type ? `type="${o.type}"` : ''} ${o.mode ? `inputmode="${o.mode}"` : ''} ${o.max ? `maxlength="${o.max}"` : ''} placeholder="${esc(o.ph || '')}" oninput="S.overlay['${id}']=this.value; clearCoError(this, '${id}')">
     ${err ? `<span class="help">${esc(err)}</span>` : o.help ? `<span class="help">${o.help}</span>` : ''}</label>`;
+}
+/** Al corregir un campo, su mensaje de error se va (sin redibujar el formulario, para no perder el foco). */
+function clearCoError(input, id) {
+  if (!S.overlay?.errors?.[id]) return;
+  delete S.overlay.errors[id];
+  const field = input.closest('.field');
+  if (field) { field.classList.remove('err'); field.querySelector('.help')?.remove(); }
+  else { const alert = input.closest('label')?.nextElementSibling; if (alert?.classList.contains('alert-danger')) alert.remove(); }
 }
 function checkoutHTML(o) {
   const d = o.d, t = lineTotals(d.unitPrice, o.qty), ruc = o.docType === 'RUC';
@@ -287,9 +295,9 @@ function checkoutHTML(o) {
         : o.deliveryMode === 'RECOJO_EN_OBRA' ? `<div class="info"><b>Recojo en la obra de ${esc(d.district)}</b><span class="muted">Te damos la dirección exacta y el contacto del almacén cuando verifiquemos tu pago.</span></div>`
         : `<div class="info"><b>Lo coordinamos contigo</b><span class="muted">Un asesor te escribe para acordar recojo o entrega.</span></div>`}
         <label class="field"><span class="label">Notas (opcional)</span><textarea class="textarea" id="co-notes" maxlength="500" placeholder="Horario de recepción, referencias…" oninput="S.overlay.notes=this.value">${esc(o.notes || '')}</textarea></label>
-        <label class="privacy"><input type="checkbox" id="co-privacy" ${o.privacy ? 'checked' : ''} onchange="S.overlay.privacy=this.checked"> <span>Acepto que Obrix Nexo use mis datos para gestionar este pedido (Ley 29733).</span></label>
+        <label class="privacy"><input type="checkbox" id="co-privacy" ${o.privacy ? 'checked' : ''} onchange="S.overlay.privacy=this.checked; clearCoError(this, 'privacy')"> <span>Acepto que Obrix Nexo use mis datos para gestionar este pedido (Ley 29733).</span></label>
         ${o.errors.privacy ? `<div class="alert alert-danger">${esc(o.errors.privacy)}</div>` : ''}
-        <label class="privacy"><input type="checkbox" id="co-terms" ${o.terms ? 'checked' : ''} onchange="S.overlay.terms=this.checked"> <span>Leí y acepto los <a class="link" href="${esc(termsUrl())}" target="_blank" rel="noopener">términos y condiciones</a> de Obrix Nexo.</span></label>
+        <label class="privacy"><input type="checkbox" id="co-terms" ${o.terms ? 'checked' : ''} onchange="S.overlay.terms=this.checked; clearCoError(this, 'terms')"> <span>Leí y acepto los <a class="link" href="${esc(termsUrl())}" target="_blank" rel="noopener">términos y condiciones</a> de Obrix Nexo.</span></label>
         ${o.errors.terms ? `<div class="alert alert-danger">${esc(o.errors.terms)}</div>` : ''}
       </div>
       <div class="summary">
@@ -393,7 +401,7 @@ function viewTrack() {
     <div class="track-grid">
       <div style="display:grid;gap:18px;min-width:0">
         <div class="box"><h4>Detalle</h4>
-          <div class="tablewrap" style="box-shadow:none"><table style="min-width:0"><thead><tr><th>Material</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr></thead><tbody>
+          <div class="tablewrap" style="box-shadow:none"><table style="min-width:0"><thead><tr><th>Material</th><th>Cantidad</th><th>Precio sin IGV</th><th>Subtotal</th></tr></thead><tbody>
             ${o.items.map(i => `<tr><td><b>${esc(i.title)}</b><br><small class="muted">${esc(i.publicCode || '')}</small></td><td class="num">${esc(uqty(i.quantity, i.unitCode))}</td><td class="num">${money(i.unitPrice)}</td><td class="num">${money(i.lineSubtotal)}</td></tr>`).join('')}
           </tbody></table></div>
           <div class="summary"><div class="row"><span>Subtotal</span><b>${money(o.subtotal)}</b></div><div class="row"><span>IGV</span><b>${money(o.igvAmount)}</b></div><div class="total"><span>Total</span><span>${money(o.total)}</span></div></div>
